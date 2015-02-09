@@ -1,0 +1,2 @@
+# qlikview
+script qlikview
