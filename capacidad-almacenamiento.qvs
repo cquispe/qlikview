@@ -1,0 +1,171 @@
+//recarga incremental
+SET vqvd = 'qvd\AntiguedadRumas.qvd';
+LET vqvdExisteCapAlm = If(FileSize(vqvd) > 0, 1, 0);
+
+IF $(vqvdExisteCapAlm) then
+    TRACE >>> Carga incremental;
+
+    AntiguedadRumas:
+    LOAD CENTRO,
+         ALMACEN,
+         [CENTRO ORIGEN],
+         RUMA,
+         MATERIAL,
+         DESCRIPCION,
+         [FECHA PROD.],
+         CANTIDAD,
+         UNIDAD,
+         [DIAS DE ANTIGÜEDAD],
+         INTERVALO,
+         AÑO,
+         MES,
+         FECHA_TMP,
+         [RANGO DIAS]
+    FROM
+    qvd\AntiguedadRumas.qvd
+    (qvd);
+
+
+    //obtiene el ultimo periodo cargado en qvd;
+    tmp_tbl_max_perido:
+    LOAD AddMonths(max(FECHA_TMP), 1) as periodo
+        Resident AntiguedadRumas;
+
+    LET vtmpMaxPeriodo = Peek('periodo',0,'tmp_tbl_max_perido');
+    LET vtmpMaxPeriodo = Subfield(vtmpMaxPeriodo,'/',3) & Subfield(vtmpMaxPeriodo,'/',2);
+
+
+    //comprueba si existe nuevo archivo xls para recargar
+    SET vxls = 'xls\Antg de rumas $(vtmpMaxPeriodo).xlsx';
+    LET vexistexls = If(FileSize(vxls) > 0, 1, 0);
+
+    IF $(vexistexls) then
+
+        TRACE >>> Cargando archivo xls Antg de Rumas $(vtmpMaxPeriodo).xlsx;
+
+        //carga solo excel que sea mayor al ultimo periodo encontrado en qvd
+        concatenate(AntiguedadRumas)
+        LOAD CENTRO,
+             ALMACEN,
+             [CENTRO ORIGEN],
+             RUMA,
+             MATERIAL,
+             DESCRIPCION,
+             [FECHA PROD.],
+             CANTIDAD,
+             UNIDAD,
+             DIAS as [DIAS DE ANTIGÜEDAD],
+             INTERVALO,
+             AÑO,
+             Num(MES,00) AS MES,
+             Date(AÑO&'-'&Num(MES,00)&'-01','YYYY-MM-DD') AS FECHA_TMP,
+             if([DIAS] <= 59, '1.Hasta 59', if([DIAS] <= 120, '2.Entre 60 y 120', '3.Más de 120')) as [RANGO DIAS]
+        FROM [xls\Antg de rumas $(vtmpMaxPeriodo).xlsx]
+        (ooxml, embedded labels, table is [ANTG DE RUMAS]);
+
+
+        //crea qvd de antiguedad de rumas
+        store AntiguedadRumas into qvd\AntiguedadRumas.qvd;
+
+    ELSE
+
+        TRACE >>>No es Necesario cargar excel;
+
+    ENDIF
+
+    DROP Table AntiguedadRumas, tmp_tbl_max_perido;
+
+ELSE
+
+    TRACE >>>Primera carga;
+    //load original de los archivos xls de antiguedad de rumas
+    LOAD CENTRO,
+         ALMACEN,
+         [CENTRO ORIGEN],
+         RUMA,
+         MATERIAL,
+         DESCRIPCION,
+         [FECHA PROD.],
+         CANTIDAD,
+         UNIDAD,
+         DIAS as [DIAS DE ANTIGÜEDAD],
+         INTERVALO,
+         AÑO,
+         Num(MES,00) AS MES,
+         Date(AÑO&'-'&Num(MES,00)&'-01','YYYY-MM-DD') AS FECHA_TMP,
+         if([DIAS] <= 59, '1.Hasta 59', if([DIAS] <= 120, '2.Entre 60 y 120', '3.Más de 120')) as [RANGO DIAS]
+    FROM [xls\Antg de Rumas *.xlsx]
+    (ooxml, embedded labels, table is [ANTG DE RUMAS]);
+
+    //crea qvd de antiguedad de rumas
+    store [ANTG DE RUMAS] into qvd\AntiguedadRumas.qvd;
+    DROP Table [ANTG DE RUMAS];
+
+ENDIF
+
+
+
+//load registros desde qv
+AntiguedadRumas:
+LOAD CENTRO,
+     ALMACEN,
+     [CENTRO ORIGEN],
+     RUMA,
+     MATERIAL,
+     DESCRIPCION,
+     [FECHA PROD.],
+     CANTIDAD,
+     UNIDAD,
+     [DIAS DE ANTIGÜEDAD],
+     INTERVALO,
+     AÑO,
+     MES,
+     Upper(Month(FECHA_TMP)) as [NOMBRE MES],
+     [RANGO DIAS]
+FROM
+qvd\AntiguedadRumas.qvd (qvd)
+Where ALMACEN = 'C001' or ALMACEN = 'CRSS';
+
+
+
+//##############################//
+//         Load Centro          //
+//##############################//
+
+Planta:
+LOAD CENTRO,
+     PLANTA
+FROM
+xls\centro\centro.xlsx
+(ooxml, embedded labels, table is Centros);
+
+
+
+//##############################//
+//    Load Tipo de Material     //
+//##############################//
+
+Left Keep (AntiguedadRumas)
+TipoMaterial:
+LOAD MATERIAL,
+     [DESCRIPCION MATERIAL],
+     TIPO,
+     FLAG
+FROM
+qvd\TipoMaterial.qvd
+(qvd);
+
+
+
+//#################################//
+//    Load Capacidad de Planta     //
+//#################################//
+
+CapacidadPlanta:
+LOAD CENTRO,
+     NOMBRE,
+     [CAPACIDAD RUMA],
+     [CAPACIDAD TM]
+FROM
+xls\centro\centro.xlsx
+(ooxml, embedded labels, table is Capacidad);
