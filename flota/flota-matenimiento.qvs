@@ -1,0 +1,188 @@
+
+// ****** App Data ******
+
+vCurrentMonth = Month(Today());
+
+ZPM_PRE_ORD_FLOT:
+LOAD DISTINCT KURZTEXT as [Denominacion PEP],
+     STATXT as [Status],
+     OBJEKTID as [Elemento PEP],
+     Mid([OBJEKTID],4,2) + 2000 as Año,
+     AutoNumber(OBJEKTID) as [Orden PEP],
+     // Solo se necesitan los que son nivel 3 y 5, los demas se obtienen sumarizando
+     If(Index(OBJEKTID,'-',1) = 0,0,1) as [Flag Nivel 2], // Usar este flag para limitar la carga
+     If(Index(OBJEKTID,'-',2) = 0,0,1) as [Flag Nivel 3], // BUDGET esta a nivel 3 usar este flag
+     If(Index(OBJEKTID,'-',3) = 0,0,1) as [Flag Nivel 4], // Usar este flag para limitar la carga
+     If(Index(OBJEKTID,'-',4) = 0,0,1) as [Flag Nivel 5], // Real / Comprometido y Plan Rest estan a nivel 5 usar este flag
+     Left(OBJEKTID,Index(OBJEKTID,'-',1)-1) as [N1], // F1P11/F314
+     Mid(OBJEKTID,Index(OBJEKTID,'/',1)+1,Index(OBJEKTID,'-',1) - Index(OBJEKTID,'/')-1 ) as [Centro Emplazamiento], // F314
+     If(Index(OBJEKTID,'-',1) <> 0, Mid(OBJEKTID,Index(OBJEKTID,'-',1)+1,2)) as [N2], //EP
+     If(Index(OBJEKTID,'-',2) <> 0, Mid(OBJEKTID,Index(OBJEKTID,'-',2)+1,2)) as [N3], //BL
+     If(Index(OBJEKTID,'-',3) <> 0, Mid(OBJEKTID,Index(OBJEKTID,'-',3)+1,2)) as [N4], //01
+     If(Index(OBJEKTID,'-',4) <> 0, Mid(OBJEKTID,Index(OBJEKTID,'-',4)+1,2)) as [N5], //SH
+     BUDGET as [Presupuesto],
+     ISTKOSTEN as [Real],
+     KSTOBLGES as [Comprometido],
+     AUFTRANF as [Plan Restante],
+     ISTKOSTEN + KSTOBLGES + AUFTRANF as [Asignado] // Para el ultimo grafico
+FROM
+qvd\ZPM_PRE_ORD_FLOT.qvd (qvd);
+
+STORE ZPM_PRE_ORD_FLOT INTO QVD\QV_ZPM_PRE_ORD_FLOT.qvd;
+DROP TABLE ZPM_PRE_ORD_FLOT;
+
+LOAD
+     [Denominacion PEP],
+     Status,
+     [Elemento PEP],
+     [Año],
+     [Orden PEP],
+     [Flag Nivel 2],
+     [Flag Nivel 3],
+     [Flag Nivel 4],
+     [Flag Nivel 5],
+     N1,
+     [Centro Emplazamiento],
+     N2,
+     N3,
+     N4,
+     N4 as [Clase ODM],
+     N5,
+     N5 as [Planner],
+     Presupuesto,
+     Real,
+     Comprometido,
+     [Plan Restante]
+FROM
+qvd\QV_ZPM_PRE_ORD_FLOT.qvd (qvd);
+
+LOAD
+     [Elemento PEP],
+     Asignado
+FROM
+qvd\QV_ZPM_PRE_ORD_FLOT.qvd (qvd)
+WHERE [Flag Nivel 5] = 1; // Solo para el ultimo grafico Asignado Nivel 5
+
+Ppto_Origen:
+CrossTable(Mes, Ppto_Origen)
+LOAD PEP as [Elemento PEP],
+     [01],
+     [02],
+     [03],
+     [04],
+     [05],
+     [06],
+     [07],
+     [08],
+     [09],
+     [10],
+     [11],
+     [12]
+FROM
+xls\Ppto_Origen.xlsx
+(ooxml, embedded labels, table is carga);
+
+STORE Ppto_Origen INTO QVD\QV_Ppto_Origen.qvd;
+DROP TABLE Ppto_Origen;
+
+LOAD
+     Mid([Elemento PEP],4,2) + 2000 as Año,
+     Left([Elemento PEP],2) as Flota,
+     [Elemento PEP],
+     Month( MakeDate( Mid([Elemento PEP],4,2) + 2000 , Num#(Mes) ) ) as [Mes],
+//   Month(MakeDate(2013,Num(Mes))) as Mes,
+     Ppto_Origen as [Ppto Origen]
+FROM
+qvd\QV_Ppto_Origen.qvd (qvd);
+
+LOAD
+     Mid([Elemento PEP],4,2) + 2000 as Año,
+     Left([Elemento PEP],2) as Flota,
+     [Elemento PEP],
+     Month( MakeDate( Mid([Elemento PEP],4,2) + 2000 , Num#(Mes) ) ) as [Mes],
+//   Month(MakeDate(2013,Num(Mes))) as Mes,
+     Ppto_Origen1 as [Ppto Origen1]
+FROM
+qvd\QV_Ppto_Origen1.qvd (qvd);
+
+Clase_Orden:
+LOAD * INLINE [
+    Clase Orden, Clase ODM, Tipo Clase Orden
+    TM01, 01, TM01. Correctivo
+    TM02, 02, TM02. Preventivo
+    TM03, 03, TM03. Emergencia
+    TM05, 05, TM05. Operaciones
+    TM06, 06, TM06. Adicional
+    TM07, 07, TM07. Predictivo
+    TM09, 09, TM09. Capitalizable
+    TM12, 12, TM12. Mejoras
+];
+
+
+Sistema:
+LOAD * INLINE [
+    Codigo Sistema, Sistema, Planner
+    01, 01. CASCO, CA
+    02, 02. PROPULSION Y GOBIERNO, PG
+    03, 03. MOTOR PRINCIPAL Y CAJA, MC
+    04, 04. SISTEMAS ELECTRICOS, SE
+    05, 05. EQUIPOS ELECTRONICOS, EE
+    06, 06. SISTEMAS HIDRAULICOS, SH
+    07, 07. SISTEMAS AUXILIARES, SA
+    08, 08. SISTEMAS DE FRIO RSW, SF
+    09, 09. PANGA, PA
+    10, 10. MOTORES AUXILIARES, MA
+    12, 12. HABITABILIDAD, HA
+    21, 21. RED ANCHOVETERA, RA
+    22, 22. RED SARDINERA, RS
+    23, 23. RED STAND BY, RB
+    25, 25. OPERACIONES, OP
+];
+
+
+LOAD
+     TPLNR as [Codigo Embarcacion],
+//     TPLKZ,
+     TPLMA as [Ubic. Tec. Sup],
+//     TRPNR,
+     IWERK as [IWERK2],
+//     ILOAN,
+//     BRGEW,
+//     BAUJJ,
+//     TYPBZ,
+     PLTXT as [Embarcacion],
+//     PLTXT2,
+//     EQFNR,
+     SWERK as [Centro Emplazamiento]
+//     ANLNR,
+//     ABCKZ,
+//  STATUS as [Status_UT]
+FROM
+qvd\ZPM_UBI_TEC.qvd (qvd)
+WHERE TPLMA = 'TF01' and STATUS = 'CRTE' and SWERK <> 'FP09';
+
+LOAD * INLINE [
+    N2, Area
+    AS, AS. Astillero
+    EP, EP. Mantenimiento
+    RE, RE. Redes
+];
+
+LOAD * INLINE [
+    N3, Clase Mantenimiento
+    BL, BL. Correctivo
+    CA, CA. Capitalizable
+    ME, ME. Mejoras
+    OP, OP. Operaciones,
+    PM, PM. Planeamiento
+];
+
+
+Responsable:
+LOAD [Centro Emplazamiento],
+     Responsable,
+     ABREVIATURA
+FROM
+xls\responsable.xlsx
+(ooxml, embedded labels, table is Hoja1);
+
