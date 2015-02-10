@@ -31,7 +31,10 @@ qvd\ZPM_PRE_ORD_FLOT.qvd (qvd);
 STORE ZPM_PRE_ORD_FLOT INTO QVD\QV_ZPM_PRE_ORD_FLOT.qvd;
 DROP TABLE ZPM_PRE_ORD_FLOT;
 
+
+QV_ZPM_PRE_ORD_FLOT:
 LOAD
+     [Año]&'#'&[Centro Emplazamiento]&'#'&N2&'#'&N3 as %idCarena,
      [Denominacion PEP],
      Status,
      [Elemento PEP],
@@ -56,12 +59,26 @@ LOAD
 FROM
 qvd\QV_ZPM_PRE_ORD_FLOT.qvd (qvd);
 
+
+join(QV_ZPM_PRE_ORD_FLOT)
+LOAD [Año]&'#'&[Centro Emplazamiento]&'#'&N2&'#'&N3 as %idCarena,
+    Carena
+FROM
+xls\carenas.xlsx
+(ooxml, embedded labels, table is Hoja1);
+
+
+DROP Field %idCarena;
+
+
+Elemento:
 LOAD
      [Elemento PEP],
      Asignado
 FROM
 qvd\QV_ZPM_PRE_ORD_FLOT.qvd (qvd)
 WHERE [Flag Nivel 5] = 1; // Solo para el ultimo grafico Asignado Nivel 5
+
 
 Ppto_Origen:
 CrossTable(Mes, Ppto_Origen)
@@ -85,6 +102,8 @@ xls\Ppto_Origen.xlsx
 STORE Ppto_Origen INTO QVD\QV_Ppto_Origen.qvd;
 DROP TABLE Ppto_Origen;
 
+
+Ppto_Origen:
 LOAD
      Mid([Elemento PEP],4,2) + 2000 as Año,
      Left([Elemento PEP],2) as Flota,
@@ -95,6 +114,8 @@ LOAD
 FROM
 qvd\QV_Ppto_Origen.qvd (qvd);
 
+
+QV_Ppto_Origen1:
 LOAD
      Mid([Elemento PEP],4,2) + 2000 as Año,
      Left([Elemento PEP],2) as Flota,
@@ -104,6 +125,7 @@ LOAD
      Ppto_Origen1 as [Ppto Origen1]
 FROM
 qvd\QV_Ppto_Origen1.qvd (qvd);
+
 
 Clase_Orden:
 LOAD * INLINE [
@@ -140,6 +162,7 @@ LOAD * INLINE [
 ];
 
 
+Embarcacion:
 LOAD
      TPLNR as [Codigo Embarcacion],
 //     TPLKZ,
@@ -161,6 +184,7 @@ FROM
 qvd\ZPM_UBI_TEC.qvd (qvd)
 WHERE TPLMA = 'TF01' and STATUS = 'CRTE' and SWERK <> 'FP09';
 
+Area:
 LOAD * INLINE [
     N2, Area
     AS, AS. Astillero
@@ -168,6 +192,8 @@ LOAD * INLINE [
     RE, RE. Redes
 ];
 
+
+Clase_Matenimiento:
 LOAD * INLINE [
     N3, Clase Mantenimiento
     BL, BL. Correctivo
@@ -185,4 +211,3 @@ LOAD [Centro Emplazamiento],
 FROM
 xls\responsable.xlsx
 (ooxml, embedded labels, table is Hoja1);
-
